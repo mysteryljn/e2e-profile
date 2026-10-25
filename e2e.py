@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 import argparse
+
+
+def _encode_data_id(data_id):
+    """Return the two-byte Data ID or raise a clear validation error."""
+    if isinstance(data_id, bool) or not isinstance(data_id, int) or not 0 <= data_id <= 0xffff:
+        raise ValueError("data_id must be an integer in 0..65535")
+    return data_id.to_bytes(2, "big")
+
+
+def _is_counter(counter):
+    """Return whether *counter* is a valid four-bit sequence counter."""
+    return isinstance(counter, int) and not isinstance(counter, bool) and 0 <= counter <= 0xf
+
+
 def crc8(data):
     crc=0xff
     for byte in data:
@@ -9,14 +23,20 @@ def crc8(data):
     return crc^0xff
 def protect(payload,counter,data_id):
     if not 0<=counter<=0xf: raise ValueError("counter must be 0..15")
-    body=bytes([counter])+data_id.to_bytes(2,"big")+payload
+    body=bytes([counter])+_encode_data_id(data_id)+payload
     return bytes([counter,crc8(body)])+payload
 def verify(frame,data_id,previous=None):
+    try:
+        data_id_bytes = _encode_data_id(data_id)
+    except ValueError:
+        return {"ok":False,"reason":"data_id_range"}
     if len(frame)<2: return {"ok":False,"reason":"too_short"}
     counter,checksum=frame[0],frame[1]; payload=frame[2:]
     if not 0<=counter<=0xf: return {"ok":False,"reason":"counter_range"}
-    if crc8(bytes([counter])+data_id.to_bytes(2,"big")+payload)!=checksum: return {"ok":False,"reason":"crc"}
+    if crc8(bytes([counter])+data_id_bytes+payload)!=checksum: return {"ok":False,"reason":"crc"}
     if previous is not None:
+        if not _is_counter(previous):
+            return {"ok":False,"reason":"previous_counter_range"}
         delta=(counter-previous)%16
         if delta==0: return {"ok":False,"reason":"repeated_counter"}
         if delta>1: return {"ok":False,"reason":"counter_jump"}
