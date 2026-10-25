@@ -15,14 +15,18 @@ def _is_counter(counter):
 
 
 def crc8(data):
-    crc=0xff
+    # AUTOSAR E2E Profile 1 uses the SAE J1850 polynomial with a
+    # logical start value and final XOR of 0x00.  The commonly quoted
+    # SAE J1850 variant uses 0xFF for both, but that variant is not
+    # interoperable with E2E Profile 1 receivers.
+    crc=0x00
     for byte in data:
         crc ^= byte
         for _ in range(8):
             crc=((crc<<1)^0x1d)&0xff if crc&0x80 else (crc<<1)&0xff
-    return crc^0xff
+    return crc
 def protect(payload,counter,data_id):
-    if not 0<=counter<=0xf: raise ValueError("counter must be 0..15")
+    if not _is_counter(counter): raise ValueError("counter must be 0..15")
     body=bytes([counter])+_encode_data_id(data_id)+payload
     return bytes([counter,crc8(body)])+payload
 def verify(frame,data_id,previous=None):
