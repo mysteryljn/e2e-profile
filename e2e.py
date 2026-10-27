@@ -3,15 +3,26 @@ import argparse
 
 
 def _encode_data_id(data_id):
-    """Return the two-byte Data ID or raise a clear validation error."""
+    """Return the two-byte AUTOSAR Data ID in low-byte-first order."""
     if isinstance(data_id, bool) or not isinstance(data_id, int) or not 0 <= data_id <= 0xffff:
         raise ValueError("data_id must be an integer in 0..65535")
-    return data_id.to_bytes(2, "big")
+    # AUTOSAR E2E Profile 1 feeds the low byte and then the high byte into
+    # the CRC calculation (PRS_E2E_00227).  Using network-byte order here
+    # creates frames that pass this module's round-trip check but fail against
+    # an AUTOSAR receiver.
+    return data_id.to_bytes(2, "little")
 
 
 def _is_counter(counter):
     """Return whether *counter* is a valid four-bit sequence counter."""
     return isinstance(counter, int) and not isinstance(counter, bool) and 0 <= counter <= 0xf
+
+
+def _as_bytes(value, name):
+    """Normalize a bytes-like value and reject text/container surprises."""
+    if not isinstance(value, (bytes, bytearray, memoryview)):
+        raise ValueError("%s must be bytes-like" % name)
+    return bytes(value)
 
 
 def crc8(data):
@@ -27,6 +38,7 @@ def crc8(data):
     return crc
 def protect(payload,counter,data_id):
     if not _is_counter(counter): raise ValueError("counter must be 0..15")
+    payload = _as_bytes(payload, "payload")
     body=bytes([counter])+_encode_data_id(data_id)+payload
     return bytes([counter,crc8(body)])+payload
 def verify(frame,data_id,previous=None):
@@ -34,6 +46,10 @@ def verify(frame,data_id,previous=None):
         data_id_bytes = _encode_data_id(data_id)
     except ValueError:
         return {"ok":False,"reason":"data_id_range"}
+    try:
+        frame = _as_bytes(frame, "frame")
+    except ValueError:
+        return {"ok":False,"reason":"frame_type"}
     if len(frame)<2: return {"ok":False,"reason":"too_short"}
     counter,checksum=frame[0],frame[1]; payload=frame[2:]
     if not 0<=counter<=0xf: return {"ok":False,"reason":"counter_range"}

@@ -10,6 +10,12 @@ class E2ETests(unittest.TestCase):
     def test_round_trip(self):
         frame=protect(b"abc",3,0x1234); result=verify(frame,0x1234,2)
         self.assertTrue(result["ok"]); self.assertEqual(result["payload"],"616263")
+
+    def test_data_id_is_serialized_low_byte_first(self):
+        # Profile 1's Data ID contribution is low byte followed by high byte.
+        # This vector catches a big-endian implementation that still passes a
+        # protect/verify round trip because both sides make the same mistake.
+        self.assertEqual(protect(b"abc", 3, 0x1234), bytes.fromhex("0339616263"))
     def test_crc_and_counter(self):
         frame=protect(b"x",1,1); bad=bytes([frame[0],frame[1]^1])+frame[2:]
         self.assertEqual(verify(bad,1)["reason"],"crc"); self.assertEqual(verify(frame,1,1)["reason"],"repeated_counter")
@@ -37,4 +43,23 @@ class E2ETests(unittest.TestCase):
             with self.subTest(counter=counter):
                 with self.assertRaisesRegex(ValueError, r"counter must be 0\.\.15"):
                     protect(b"x", counter, 1)
+
+    def test_protect_rejects_non_bytes_payload_without_internal_error(self):
+        for payload in (None, "x", [120], 1, True):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(ValueError, r"payload must be bytes-like"):
+                    protect(payload, 1, 1)
+
+    def test_verify_rejects_non_bytes_frame_without_crashing(self):
+        for frame in (None, "0100", [1, 0], 1, True):
+            with self.subTest(frame=frame):
+                self.assertEqual(
+                    verify(frame, 1),
+                    {"ok": False, "reason": "frame_type"},
+                )
+
+    def test_bytes_like_frames_are_normalized(self):
+        frame = protect(b"x", 1, 1)
+        self.assertTrue(verify(bytearray(frame), 1)["ok"])
+        self.assertTrue(verify(memoryview(frame), 1)["ok"])
 if __name__=="__main__": unittest.main()
