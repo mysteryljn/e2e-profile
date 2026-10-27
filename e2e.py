@@ -66,8 +66,18 @@ def main(argv=None):
     a=sub.add_parser("protect"); a.add_argument("payload"); a.add_argument("--counter",type=int,required=True); a.add_argument("--data-id",type=int,required=True)
     b=sub.add_parser("verify"); b.add_argument("frame"); b.add_argument("--data-id",type=int,required=True); b.add_argument("--previous",type=int)
     x=p.parse_args(argv)
-    if x.cmd=="protect": print(protect(bytes.fromhex(x.payload),x.counter,x.data_id).hex())
-    elif x.cmd=="verify": print(verify(bytes.fromhex(x.frame),x.data_id,x.previous))
-    else: p.error("choose protect or verify")
+    try:
+        if x.cmd=="protect": print(protect(bytes.fromhex(x.payload),x.counter,x.data_id).hex())
+        elif x.cmd=="verify":
+            result=verify(bytes.fromhex(x.frame),x.data_id,x.previous)
+            print(result)
+            return 0 if result["ok"] else 1
+        else: p.error("choose protect or verify")
+    except ValueError as exc:
+        # Hex payloads come from external logs or command-line automation.
+        # Report malformed/odd input with a stable error code instead of
+        # leaking a traceback from ``bytes.fromhex`` or protect validation.
+        print("error: "+str(exc))
+        return 2
     return 0
 if __name__=="__main__": raise SystemExit(main())

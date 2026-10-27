@@ -1,5 +1,7 @@
+import contextlib
+import io
 import unittest
-from e2e import crc8, protect,verify
+from e2e import crc8, main, protect,verify
 class E2ETests(unittest.TestCase):
     def test_crc8_uses_autosar_profile_parameters(self):
         # Profile 1 uses polynomial 0x1D with init=0x00/final_xor=0x00.
@@ -62,4 +64,25 @@ class E2ETests(unittest.TestCase):
         frame = protect(b"x", 1, 1)
         self.assertTrue(verify(bytearray(frame), 1)["ok"])
         self.assertTrue(verify(memoryview(frame), 1)["ok"])
+
+    def test_cli_rejects_malformed_hex_without_traceback(self):
+        for argv in (
+            ["protect", "abc", "--counter", "1", "--data-id", "1"],
+            ["verify", "010", "--data-id", "1"],
+            ["verify", "zz", "--data-id", "1"],
+        ):
+            output = io.StringIO()
+            with self.subTest(argv=argv), contextlib.redirect_stdout(output):
+                self.assertEqual(main(argv), 2)
+            self.assertIn("error:", output.getvalue())
+
+    def test_verify_cli_fails_for_invalid_frame(self):
+        frame = protect(b"x", 1, 1)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["verify", frame.hex(), "--data-id", "1"]), 0)
+            invalid = bytes([frame[0], frame[1] ^ 1]) + frame[2:]
+            self.assertEqual(main(["verify", invalid.hex(), "--data-id", "1"]), 1)
+        self.assertIn("'ok': False", output.getvalue())
+
 if __name__=="__main__": unittest.main()
