@@ -17,3 +17,7 @@ E2E 保护的边界条件通常藏在供应商实现和集成测试里，计数�
 ## 许可证
 
 MIT
+
+## Archived
+
+This repository is archived and no longer receives feature development. See the maintained replacement [junit-change-report](https://github.com/mysteryljn/junit-change-report) for the active workflow. The source history remains available for reference.
